@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Marca Web Digital: losango + órbitas em dourado sobre grafite -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E3C690"/>
+      <stop offset="100%" stop-color="#B08D57"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#C09E6F" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#C09E6F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0A0A0B"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" stroke="#C09E6F" stroke-opacity="0.25"/>
+  <circle cx="32" cy="32" r="26" fill="url(#glow)"/>
+  <ellipse cx="32" cy="32" rx="25" ry="9.5" stroke="url(#g)" stroke-width="1.6" opacity="0.75" transform="rotate(28 32 32)"/>
+  <circle cx="51" cy="35.5" r="2" fill="#E3C690"/>
+  <ellipse cx="32" cy="32" rx="20" ry="7.5" stroke="url(#g)" stroke-width="1.3" opacity="0.55" transform="rotate(-22 32 32)"/>
+  <circle cx="15" cy="27.5" r="1.6" fill="#B08D57"/>
+  <path d="M32 12 L45 32 L32 52 L19 32 Z" stroke="url(#g)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M32 12 L32 52 M19 32 L45 32 M32 12 L25 32 L32 52 L39 32 Z" stroke="#B08D57" stroke-width="1.2" stroke-linejoin="round" opacity="0.6"/>
+  <path d="M32 24.5 L39.5 32 L32 39.5 L24.5 32 Z" fill="#B08D57" fill-opacity="0.25" stroke="#E3C690" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="2.6" fill="#F1DDB4"/>
+</svg>

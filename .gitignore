@@ -1,0 +1,14 @@
+# Dependências (reinstale com npm install)
+node_modules/
+
+# Builds (os instaladores vão para os Releases do GitHub, não para o código)
+dist/
+
+# Configurações locais
+.claude/
+*.code-workspace
+.env
+
+# Sistema
+Thumbs.db
+desktop.ini

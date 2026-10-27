@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Digital · PDF Tools</title>
+    <!-- Bibliotecas empacotadas localmente (o app funciona offline) -->
+    <script src="lib/pdf-lib.min.js"></script>
+    <script src="lib/pdf.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <!-- Marca Web Digital (losango + órbitas em dourado) -->
+                    <span class="logo-mark">
+                        <svg width="26" height="26" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                            <defs>
+                                <linearGradient id="wdLogoGold" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0%" stop-color="#e3c690"/>
+                                    <stop offset="100%" stop-color="#b08d57" stop-opacity="0.5"/>
+                                </linearGradient>
+                            </defs>
+                            <ellipse cx="20" cy="20" rx="16" ry="6" stroke="url(#wdLogoGold)" stroke-width="0.9" opacity="0.7" transform="rotate(28 20 20)"/>
+                            <circle cx="33" cy="22" r="1.1" fill="#e3c690"/>
+                            <ellipse cx="20" cy="20" rx="12.5" ry="4.5" stroke="url(#wdLogoGold)" stroke-width="0.8" opacity="0.5" transform="rotate(-22 20 20)"/>
+                            <circle cx="9.5" cy="17.5" r="0.9" fill="#c09e6f"/>
+                            <path d="M20 8 L29 20 L20 32 L11 20 Z" stroke="url(#wdLogoGold)" stroke-width="1.3" stroke-linejoin="round"/>
+                            <path d="M20 8 L20 32 M11 20 L29 20 M20 8 L15.5 20 L20 32 L24.5 20 Z" stroke="#c09e6f" stroke-width="0.7" stroke-linejoin="round" opacity="0.6"/>
+                            <path d="M20 15.5 L24.5 20 L20 24.5 L15.5 20 Z" fill="#b08d57" fill-opacity="0.15" stroke="#c09e6f" stroke-width="0.9"/>
+                            <circle cx="20" cy="20" r="1.4" fill="#e3c690"/>
+                        </svg>
+                    </span>
+                    <div class="logo-text-group">
+                        <span class="logo-text">Web Digital</span>
+                        <span class="logo-badge">PDF Tools</span>
+                    </div>
+                </div>
+                <div class="header-info">
+                    <!-- Atualização automática: aparece só quando há nova versão -->
+                    <button class="update-badge" id="updateBadge" style="display: none;" onclick="installUpdate()" disabled>
+                        <span class="update-spinner"></span>
+                        <span class="update-text">Baixando atualização...</span>
+                    </button>
+                    <span class="status-badge" id="statusBadge">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Verificando...</span>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs-container">
+            <button class="tab-btn active" data-tab="combine" onclick="switchTab('combine')">
+                <span>📑</span> Combinar
+            </button>
+            <button class="tab-btn" data-tab="edit" onclick="switchTab('edit')">
+                <span>✏️</span> Editar PDF
+            </button>
+        </div>
+
+        <main class="main-content">
+            <!-- Tab: Combinar -->
+            <div id="tab-combine" class="tab-content active">
+                <div class="alert alert-warning" id="officeAlert" style="display: none;">
+                    <div class="alert-icon">⚠️</div>
+                    <div class="alert-content">
+                        <strong>Microsoft Office não encontrado!</strong>
+                        <p>Documentos Office não poderão ser convertidos. PDFs continuam funcionando normalmente.</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-icon">
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <p class="drop-text">Arraste arquivos aqui</p>
+                        <p class="drop-subtext">ou clique para selecionar — PDF, Word, Excel e PowerPoint</p>
+                        <div class="supported-formats">
+                            <span class="format-tag pdf">PDF</span>
+                            <span class="format-tag word">DOC</span>
+                            <span class="format-tag excel">XLS</span>
+                            <span class="format-tag ppt">PPT</span>
+                        </div>
+                    </div>
+
+                    <div class="sort-bar" id="sortBar" style="display: none;">
+                        <span class="sort-label">Ordenar:</span>
+                        <button class="sort-btn" onclick="sortFiles('name-asc')">A→Z</button>
+                        <button class="sort-btn" onclick="sortFiles('name-desc')">Z→A</button>
+                        <button class="sort-btn" onclick="sortFiles('number')">1→9</button>
+                        <button class="sort-btn" onclick="sortFiles('type')">Tipo</button>
+                    </div>
+
+                    <div class="file-list" id="fileList"></div>
+
+                    <div class="progress-section" id="progressSection" style="display: none;">
+                        <div class="progress-info">
+                            <span id="progressText">Processando...</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                    </div>
+
+                    <div class="action-bar" id="actionBar" style="display: none;">
+                        <button class="btn-secondary" onclick="clearFiles()">🗑️ Limpar</button>
+                        <button class="btn-primary" id="combineBtn" onclick="combineAndSave()">⚡ Combinar e Salvar</button>
+                    </div>
+
+                    <div class="results-section" id="resultsSection" style="display: none;">
+                        <div class="results-icon">✅</div>
+                        <div class="results-text" id="resultsText">PDF criado!</div>
+                        <div class="results-actions">
+                            <button class="btn-secondary" onclick="openOutputFile()">📄 Abrir</button>
+                            <button class="btn-secondary" onclick="openOutputFolder()">📂 Pasta</button>
+                            <button class="btn-primary" onclick="startNew()">➕ Novo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Editar PDF -->
+            <div id="tab-edit" class="tab-content">
+                <div class="card">
+                    <div class="drop-zone" id="editDropZone">
+                        <div class="drop-icon">
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <p class="drop-text">Arraste um PDF para editar</p>
+                        <p class="drop-subtext">Apague textos, cubra áreas e adicione anotações</p>
+                    </div>
+
+                    <!-- Editor Container -->
+                    <div id="editorContainer" style="display: none;">
+                        <div class="editor-toolbar">
+                            <div class="toolbar-group">
+                                <button class="tool-btn" data-tool="select" onclick="setTool('select')" title="Selecionar / mover uma edição (arraste para reposicionar)">👆</button>
+                                <button class="tool-btn active" data-tool="erase" onclick="setTool('erase')" title="Apagar (cobrir área)">🧹</button>
+                                <button class="tool-btn" data-tool="text" onclick="setTool('text')" title="Texto — clique no local desejado">📝</button>
+                                <button class="tool-btn" data-tool="highlight" onclick="setTool('highlight')" title="Marca-texto sobre texto existente do PDF">🖊️</button>
+                                <button class="tool-btn" data-tool="rect" onclick="setTool('rect')" title="Retângulo">▭</button>
+                            </div>
+                            <span class="tb-sep"></span>
+                            <div class="toolbar-group">
+                                <select id="toolFont" class="tb-select" title="Fonte">
+                                    <option value="Helvetica">Arial</option>
+                                    <option value="Times">Times</option>
+                                    <option value="Courier">Courier</option>
+                                </select>
+                                <input type="number" id="toolSize" class="tb-num" value="16" min="6" max="200" title="Tamanho da fonte">
+                                <button class="fmt-btn" id="fmt-bold" onmousedown="event.preventDefault()" onclick="toggleFormat('bold')" title="Negrito"><b>B</b></button>
+                                <button class="fmt-btn" id="fmt-italic" onmousedown="event.preventDefault()" onclick="toggleFormat('italic')" title="Itálico"><i>I</i></button>
+                                <button class="fmt-btn" id="fmt-underline" onmousedown="event.preventDefault()" onclick="toggleFormat('underline')" title="Sublinhado"><u>U</u></button>
+                                <button class="fmt-btn" id="fmt-highlight" onmousedown="event.preventDefault()" onclick="toggleFormat('highlight')" title="Marca-texto">🖍️</button>
+                            </div>
+                            <span class="tb-sep"></span>
+                            <div class="toolbar-group">
+                                <label class="color-label" title="Cor do texto / traço"><b>A</b><input type="color" id="toolColor" value="#ffffff"></label>
+                                <label class="color-label" title="Cor do marca-texto">🖍️<input type="color" id="toolHighlight" value="#ffeb3b"></label>
+                            </div>
+                            <span class="tb-sep"></span>
+                            <div class="toolbar-group">
+                                <button class="btn-secondary btn-sm" onclick="deleteSelected()" title="Excluir a edição selecionada (tecla Delete)">🗑️</button>
+                                <button class="btn-secondary btn-sm" onclick="undoEdit()" title="Desfazer última edição">↩️</button>
+                            </div>
+                        </div>
+
+                        <!-- Controles de Zoom e Navegação -->
+                        <div class="editor-controls">
+                            <div class="control-group">
+                                <button class="ctrl-btn" onclick="zoomOut()" title="Diminuir">−</button>
+                                <span id="zoomLevel">100%</span>
+                                <button class="ctrl-btn" onclick="zoomIn()" title="Aumentar">+</button>
+                                <button class="ctrl-btn" onclick="zoomFit()" title="Ajustar à tela">📐</button>
+                                <button class="ctrl-btn" onclick="zoomActual()" title="Tamanho real">1:1</button>
+                            </div>
+                            <div class="control-group">
+                                <button class="ctrl-btn" onclick="rotatePage(-90)" title="Girar esquerda">↺</button>
+                                <button class="ctrl-btn" onclick="rotatePage(90)" title="Girar direita">↻</button>
+                            </div>
+                            <div class="control-group">
+                                <button class="nav-btn" onclick="prevPage()" title="Página anterior">◀</button>
+                                <span id="pageIndicator">1 / 1</span>
+                                <button class="nav-btn" onclick="nextPage()" title="Próxima página">▶</button>
+                                <input type="number" id="pageInput" min="1" value="1" onchange="goToPage(this.value)" title="Ir para página">
+                            </div>
+                            <div class="control-group">
+                                <button class="ctrl-btn fullscreen-btn" onclick="toggleFullscreen()" title="Tela cheia">⛶</button>
+                            </div>
+                        </div>
+
+                        <div class="editor-actions">
+                            <button class="btn-secondary" onclick="cancelEdit()">✕ Cancelar</button>
+                            <button class="btn-primary" onclick="saveEditedPdf()">💾 Salvar PDF Editado</button>
+                        </div>
+
+                        <div class="editor-canvas-container" id="canvasContainer">
+                            <div class="canvas-wrapper" id="canvasWrapper">
+                                <canvas id="pdfCanvas"></canvas>
+                                <canvas id="editCanvas"></canvas>
+                                <input type="text" id="inlineTextInput" class="inline-text-input" style="display: none;" autocomplete="off" spellcheck="false">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <span>Desenvolvido por: <a href="#" onclick="openExternal('https://github.com/MurilloMts')" class="footer-link">Murillo Matos</a></span>
+                <span class="footer-sep">|</span>
+                <span>Powered by: <a href="#" onclick="openExternal('https://www.webdigital.app/')" class="footer-link">Web Digital</a></span>
+                <span class="footer-sep">·</span>
+                <span>© 2026 — Todos os direitos reservados.</span>
+                <span class="footer-sep">·</span>
+                <span id="appVersion">v1.0.1</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
