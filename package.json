@@ -1,6 +1,6 @@
 {
   "name": "web-digital-pdf-tools",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "Web Digital · PDF Tools — combine documentos Office/PDF e edite PDFs. Desenvolvido por Murillo Matos",
   "main": "main.js",
   "author": {

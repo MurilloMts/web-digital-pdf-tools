@@ -9,6 +9,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Botão "Run workflow" na aba Actions (escolha a tag da versão em "Use workflow from")
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,6 +28,7 @@ jobs:
 
       # A tag precisa bater com o package.json, senão os apps instalados não detectam a atualização
       - name: Conferir versão
+        if: github.ref_type == 'tag'
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
