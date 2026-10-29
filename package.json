@@ -46,6 +46,7 @@
       "!dist/**",
       "!tools/**",
       "!.claude/**",
+      "!.github/**",
       "!*.code-workspace"
     ],
     "publish": [

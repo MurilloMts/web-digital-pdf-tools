@@ -69,26 +69,26 @@ baixada em segundo plano e aparece o botão **"Reiniciar e atualizar"** no cabe�
 
 > A versão **portátil** não se atualiza sozinha — quem usar ela precisa baixar de novo.
 
-### Configuração (uma vez)
-
-1. Crie o repositório **público** `web-digital-pdf-tools` na sua conta do GitHub
-   (para outro nome/conta, ajuste `build.publish` no `package.json`).
-2. Crie um token em GitHub → Settings → Developer settings → Personal access tokens
-   → *Fine-grained*, com acesso ao repositório e permissão **Contents: Read and write**.
-
 ### Publicar uma nova versão
 
-1. Aumente `"version"` no `package.json` (ex.: `1.0.1` → `1.0.2`). **Sem isso os apps
+A publicação é feita pelo GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)),
+usando o token interno do repositório — **não é preciso criar token pessoal**.
+
+1. Aumente `"version"` no `package.json` (ex.: `1.0.2` → `1.0.3`). **Sem isso os apps
    não detectam a atualização.**
-2. No PowerShell:
+2. Faça o commit e envie uma tag com a mesma versão:
 
    ```powershell
-   $env:GH_TOKEN = "seu_token_aqui"
-   npm run release
+   git tag v1.0.3
+   git push origin main v1.0.3
    ```
 
-3. Pronto: o release é publicado com o instalador, a versão portátil e o `latest.yml`.
-   Os apps instalados se atualizam na próxima vez que forem abertos.
+3. Em ~10 minutos o GitHub gera o instalador, a versão portátil e o `latest.yml` e publica
+   o release (acompanhe na aba **Actions** do repositório). Os apps instalados se atualizam
+   na próxima vez que forem abertos.
+
+> Se a tag não bater com a versão do `package.json`, o workflow falha de propósito.
+> Publicar do próprio PC (`npm run release` com `$env:GH_TOKEN`) continua possível.
 
 > Mande para os amigos o link `https://github.com/MurilloMts/web-digital-pdf-tools/releases/latest`
 > — eles instalam o **Setup** uma vez e daí em diante tudo é automático.
