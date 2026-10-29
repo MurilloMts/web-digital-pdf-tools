@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
     convertOfficeToPdf: (args) => ipcRenderer.invoke('convert-office-to-pdf', args),
     readPdfFile: (filePath) => ipcRenderer.invoke('read-pdf-file', filePath),
     savePdf: (args) => ipcRenderer.invoke('save-pdf', args),
+    selectFolder: () => ipcRenderer.invoke('select-folder'),
+    savePdfInFolder: (args) => ipcRenderer.invoke('save-pdf-in-folder', args),
     deleteTempFile: (filePath) => ipcRenderer.invoke('delete-temp-file', filePath),
     getTempFolder: () => ipcRenderer.invoke('get-temp-folder'),
     openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),

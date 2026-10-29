@@ -372,6 +372,34 @@ ipcMain.handle('save-pdf', async (event, { data, outputPath }) => {
     }
 });
 
+// Escolher a pasta de destino dos arquivos separados
+ipcMain.handle('select-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'createDirectory']
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
+
+// Salvar um PDF numa pasta sem sobrescrever nada: o nome é higienizado
+// (só o nome do arquivo, sem caminho) e ganha " (2)", " (3)"... se já existir.
+ipcMain.handle('save-pdf-in-folder', async (event, { data, folder, fileName }) => {
+    try {
+        let base = path.basename(String(fileName || ''))
+            .replace(/\.pdf$/i, '')
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+            .replace(/[. ]+$/, '')
+            .trim() || 'documento';
+        let outputPath = path.join(folder, base + '.pdf');
+        for (let n = 2; fs.existsSync(outputPath); n++) {
+            outputPath = path.join(folder, `${base} (${n}).pdf`);
+        }
+        fs.writeFileSync(outputPath, Buffer.from(data, 'base64'));
+        return { success: true, path: outputPath };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
 // Limpar arquivo temporário
 ipcMain.handle('delete-temp-file', async (event, filePath) => {
     try { fs.unlinkSync(filePath); } catch (e) {}

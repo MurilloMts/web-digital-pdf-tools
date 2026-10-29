@@ -104,7 +104,7 @@ function setupUpdates() {
 function hasUnsavedWork() {
     const hasEdits = !!editorState.pdfDoc
         && editorState.edits.some(p => Array.isArray(p) && p.length > 0);
-    return state.files.length > 0 || hasEdits || state.isProcessing;
+    return state.files.length > 0 || hasEdits || state.isProcessing || splitState.isProcessing;
 }
 
 function installUpdate() {
@@ -453,6 +453,7 @@ async function processAndMerge() {
 
         try {
             const mergedPdf = await PDFLib.PDFDocument.create();
+            const parts = []; // onde cada arquivo original começa (permite separar depois)
             let merged = 0;
 
             for (const pdfBuffer of pdfBuffers) {
@@ -460,6 +461,12 @@ async function processAndMerge() {
                     // ignoreEncryption: PDFs só com restrição de edição (sem senha de abertura) ainda podem ser juntados
                     const pdf = await PDFLib.PDFDocument.load(pdfBuffer.data, { ignoreEncryption: true });
                     const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    if (pages.length === 0) continue;
+                    parts.push({
+                        name: pdfBuffer.name.replace(/\.[^.]+$/, ''),
+                        start: mergedPdf.getPageCount(),
+                        count: pages.length
+                    });
                     pages.forEach(page => mergedPdf.addPage(page));
                     merged++;
                 } catch (e) {
@@ -476,6 +483,7 @@ async function processAndMerge() {
                 return;
             }
 
+            recordParts(mergedPdf, parts);
             const mergedBytes = await mergedPdf.save();
 
             updateProgress(95, 'Salvando...');
@@ -501,6 +509,41 @@ async function processAndMerge() {
     }
 }
 
+// Grava no PDF combinado de onde veio cada página, de duas formas:
+// - chave "WDParts" no dicionário de informações (lida pela aba Separar: nomes e intervalos exatos)
+// - marcadores (bookmarks), um por arquivo — úteis em qualquer leitor e como plano B na separação
+const PARTS_INFO_KEY = 'WDParts';
+
+function recordParts(pdfDoc, parts) {
+    if (parts.length === 0) return;
+    const { PDFName, PDFHexString } = PDFLib;
+    const ctx = pdfDoc.context;
+
+    pdfDoc.getInfoDict().set(PDFName.of(PARTS_INFO_KEY), PDFHexString.fromText(JSON.stringify(parts)));
+
+    const pageRefs = pdfDoc.getPages().map(p => p.ref);
+    const outlineRef = ctx.nextRef();
+    const itemRefs = parts.map(() => ctx.nextRef());
+    parts.forEach((part, i) => {
+        const item = ctx.obj({
+            Title: PDFHexString.fromText(part.name),
+            Parent: outlineRef,
+            Dest: [pageRefs[part.start], 'Fit']
+        });
+        if (i > 0) item.set(PDFName.of('Prev'), itemRefs[i - 1]);
+        if (i < parts.length - 1) item.set(PDFName.of('Next'), itemRefs[i + 1]);
+        ctx.assign(itemRefs[i], item);
+    });
+    ctx.assign(outlineRef, ctx.obj({
+        Type: 'Outlines',
+        First: itemRefs[0],
+        Last: itemRefs[itemRefs.length - 1],
+        Count: parts.length
+    }));
+    pdfDoc.catalog.set(PDFName.of('Outlines'), outlineRef);
+    pdfDoc.catalog.set(PDFName.of('PageMode'), PDFName.of('UseOutlines'));
+}
+
 function openOutputFile() {
     if (state.outputPath) window.api.openFile(state.outputPath);
 }
@@ -518,6 +561,351 @@ function startNew() {
 
 function openExternal(url) {
     window.api.openExternal(url);
+}
+
+// ==================== SEPARAR PDF ====================
+//
+// Desfaz uma junção: recria um PDF por arquivo original. As divisões vêm, em ordem:
+// 1) da chave WDParts gravada por este app ao combinar;
+// 2) dos marcadores de primeiro nível (PDFs juntados por outros programas);
+// além disso o usuário pode separar por intervalos ou página a página.
+
+const splitState = {
+    path: null,
+    bytes: null,
+    pageCount: 0,
+    detected: [],     // partes detectadas no arquivo: { name, start, count }
+    source: null,     // 'app' | 'outline' | null
+    mode: 'detected', // 'detected' | 'ranges' | 'pages'
+    parts: [],        // partes exibidas: { name, start, count, selected }
+    isProcessing: false,
+    outputFolder: null,
+    lastSavedPath: null
+};
+
+function setupSplit() {
+    const zone = document.getElementById('splitDropZone');
+
+    zone.addEventListener('click', async () => {
+        const files = await window.api.selectPdf();
+        if (files && files.length > 0) loadPdfForSplit(files[0]);
+    });
+    zone.addEventListener('dragenter', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        zone.classList.add('dragover');
+    });
+    zone.addEventListener('dragover', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        zone.classList.add('dragover');
+    });
+    zone.addEventListener('dragleave', (e) => {
+        e.stopPropagation();
+        if (!zone.contains(e.relatedTarget)) zone.classList.remove('dragover');
+    });
+    zone.addEventListener('drop', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        zone.classList.remove('dragover');
+        const file = Array.from(e.dataTransfer.files).find(f => f.name.toLowerCase().endsWith('.pdf'));
+        if (file) loadPdfForSplit(file.path);
+    });
+
+    document.getElementById('splitRanges').addEventListener('input', () => {
+        if (splitState.mode === 'ranges') buildSplitParts();
+    });
+}
+
+async function loadPdfForSplit(filePath) {
+    const result = await window.api.readPdfFile(filePath);
+    if (!result.success) {
+        alert('Erro ao ler o PDF: ' + result.error);
+        return;
+    }
+
+    try {
+        const bytes = base64ToBytes(result.data);
+        const doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+        splitState.path = filePath;
+        splitState.bytes = bytes;
+        splitState.pageCount = doc.getPageCount();
+
+        let detected = readRecordedParts(doc, splitState.pageCount);
+        splitState.source = detected ? 'app' : null;
+        if (!detected) {
+            detected = await readOutlineParts(bytes, splitState.pageCount);
+            if (detected) splitState.source = 'outline';
+        }
+        splitState.detected = detected || [];
+    } catch (e) {
+        alert('Não foi possível abrir o PDF: ' + e.message);
+        return;
+    }
+
+    document.getElementById('splitRanges').value = '';
+    document.getElementById('splitResults').style.display = 'none';
+    document.getElementById('splitDropZone').style.display = 'none';
+    document.getElementById('splitPanel').style.display = 'block';
+    setSplitMode(splitState.detected.length > 1 ? 'detected' : 'pages');
+}
+
+// Partes gravadas por este app ao combinar (ignora se não baterem com o arquivo,
+// por exemplo se páginas foram removidas depois em outro programa)
+function readRecordedParts(doc, pageCount) {
+    try {
+        const raw = doc.getInfoDict().lookup(PDFLib.PDFName.of(PARTS_INFO_KEY));
+        if (!raw || typeof raw.decodeText !== 'function') return null;
+        const parts = JSON.parse(raw.decodeText());
+        let expected = 0;
+        for (const p of parts) {
+            if (p.start !== expected || !(p.count > 0)) return null;
+            expected += p.count;
+        }
+        return expected === pageCount && parts.length > 0
+            ? parts.map(p => ({ name: String(p.name || 'documento'), start: p.start, count: p.count }))
+            : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Marcadores de primeiro nível: cada um marca o início de uma parte
+async function readOutlineParts(bytes, pageCount) {
+    // pdf.js transfere o buffer para o worker: passa uma cópia
+    const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+    try {
+        const outline = await pdf.getOutline();
+        if (!outline || outline.length === 0) return null;
+
+        const starts = [];
+        for (const item of outline) {
+            try {
+                let dest = item.dest;
+                if (typeof dest === 'string') dest = await pdf.getDestination(dest);
+                if (!Array.isArray(dest) || !dest[0]) continue;
+                const index = typeof dest[0] === 'number' ? dest[0] : await pdf.getPageIndex(dest[0]);
+                if (index >= 0 && index < pageCount && !starts.some(s => s.start === index)) {
+                    starts.push({ name: item.title || '', start: index });
+                }
+            } catch (e) { /* marcador sem destino válido: ignora */ }
+        }
+        starts.sort((a, b) => a.start - b.start);
+        if (starts.length === 0) return null;
+        if (starts[0].start > 0) starts.unshift({ name: 'Início', start: 0 });
+
+        return starts.map((s, i) => ({
+            name: s.name.trim() || `Parte ${i + 1}`,
+            start: s.start,
+            count: (i + 1 < starts.length ? starts[i + 1].start : pageCount) - s.start
+        }));
+    } finally {
+        pdf.destroy();
+    }
+}
+
+// "1-3, 5, 8-10" -> [{start: 0, count: 3}, ...]; null se algo for inválido
+function parseRanges(text, pageCount) {
+    const ranges = [];
+    for (const piece of text.split(/[,;]/).map(s => s.trim()).filter(Boolean)) {
+        const m = piece.match(/^(\d+)\s*(?:-\s*(\d+))?$/);
+        if (!m) return null;
+        const from = parseInt(m[1], 10);
+        const to = m[2] ? parseInt(m[2], 10) : from;
+        if (from < 1 || to > pageCount || from > to) return null;
+        ranges.push({ start: from - 1, count: to - from + 1 });
+    }
+    return ranges;
+}
+
+function setSplitMode(mode) {
+    splitState.mode = mode;
+    document.querySelectorAll('.mode-btn').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.mode === mode));
+    document.getElementById('splitRangesRow').style.display = mode === 'ranges' ? 'flex' : 'none';
+    document.getElementById('splitResults').style.display = 'none';
+    buildSplitParts();
+    if (mode === 'ranges') document.getElementById('splitRanges').focus();
+}
+
+function buildSplitParts() {
+    const baseName = basename(splitState.path || 'documento.pdf').replace(/\.pdf$/i, '');
+    const rangesInput = document.getElementById('splitRanges');
+    let parts = [];
+
+    if (splitState.mode === 'detected') {
+        parts = splitState.detected.map(p => ({ ...p }));
+    } else if (splitState.mode === 'pages') {
+        for (let i = 0; i < splitState.pageCount; i++) {
+            parts.push({ name: `${baseName} - página ${i + 1}`, start: i, count: 1 });
+        }
+    } else {
+        const ranges = parseRanges(rangesInput.value, splitState.pageCount);
+        rangesInput.classList.toggle('invalid', ranges === null);
+        parts = (ranges || []).map(r => ({
+            name: r.count === 1
+                ? `${baseName} - página ${r.start + 1}`
+                : `${baseName} - páginas ${r.start + 1}-${r.start + r.count}`,
+            ...r
+        }));
+    }
+
+    splitState.parts = parts.map(p => ({ ...p, selected: true }));
+    renderSplitParts();
+}
+
+function describeSplitSource() {
+    const pages = `${splitState.pageCount} página${splitState.pageCount === 1 ? '' : 's'}`;
+    if (splitState.source === 'app') {
+        return `${pages} · ${splitState.detected.length} arquivos originais identificados`;
+    }
+    if (splitState.source === 'outline') {
+        return `${pages} · ${splitState.detected.length} partes identificadas pelos marcadores`;
+    }
+    return `${pages} · nenhuma divisão encontrada — separe por intervalos ou página a página`;
+}
+
+function renderSplitParts() {
+    document.getElementById('splitFileName').textContent = basename(splitState.path || '');
+    document.getElementById('splitFileInfo').textContent = describeSplitSource();
+    document.querySelector('.mode-btn[data-mode="detected"]').disabled = splitState.detected.length < 2;
+
+    const list = document.getElementById('splitPartList');
+    if (splitState.parts.length === 0) {
+        const invalid = document.getElementById('splitRanges').classList.contains('invalid');
+        const message = splitState.mode !== 'ranges'
+            ? 'Nada para separar.'
+            : invalid
+                ? `Intervalo inválido — use páginas de 1 a ${splitState.pageCount}, por exemplo: 1-3, 4-6, 7`
+                : 'Digite os intervalos acima, por exemplo: 1-3, 4-6, 7';
+        list.innerHTML = `<div class="split-empty">${message}</div>`;
+    } else {
+        list.innerHTML = splitState.parts.map((part, index) => {
+            const first = part.start + 1;
+            const last = part.start + part.count;
+            const range = part.count === 1 ? `Página ${first}` : `Páginas ${first}–${last} · ${part.count} págs.`;
+            return `
+                <div class="file-item part-item ${part.selected ? '' : 'unselected'}">
+                    <input type="checkbox" class="part-check" ${part.selected ? 'checked' : ''}
+                        ${splitState.isProcessing ? 'disabled' : ''}
+                        onchange="toggleSplitPart(${index}, this.checked)" title="Incluir este arquivo">
+                    <div class="file-icon">📕</div>
+                    <div class="file-info">
+                        <input type="text" class="part-name" value="${escapeHtml(part.name)}"
+                            ${splitState.isProcessing ? 'disabled' : ''}
+                            oninput="renameSplitPart(${index}, this.value)" spellcheck="false" title="Nome do arquivo">
+                        <div class="file-type">${range}</div>
+                    </div>
+                    <span class="part-ext">.pdf</span>
+                </div>`;
+        }).join('');
+    }
+    updateSplitButton();
+}
+
+function toggleSplitPart(index, checked) {
+    splitState.parts[index].selected = checked;
+    renderSplitParts();
+}
+
+function renameSplitPart(index, value) {
+    splitState.parts[index].name = value;
+}
+
+function toggleAllSplitParts() {
+    const allSelected = splitState.parts.every(p => p.selected);
+    splitState.parts.forEach(p => { p.selected = !allSelected; });
+    renderSplitParts();
+}
+
+function updateSplitButton() {
+    const count = splitState.parts.filter(p => p.selected).length;
+    const btn = document.getElementById('splitBtn');
+    btn.disabled = splitState.isProcessing || count === 0;
+    btn.textContent = count > 0 ? `✂️ Separar ${count} arquivo${count === 1 ? '' : 's'}` : '✂️ Separar';
+}
+
+function updateSplitProgress(percent, text) {
+    document.getElementById('splitProgressFill').style.width = `${percent}%`;
+    document.getElementById('splitProgressPercent').textContent = `${Math.round(percent)}%`;
+    document.getElementById('splitProgressText').textContent = text;
+}
+
+async function splitAndSave() {
+    const selected = splitState.parts.filter(p => p.selected);
+    if (selected.length === 0 || splitState.isProcessing) return;
+
+    const folder = await window.api.selectFolder();
+    if (!folder) return;
+
+    splitState.isProcessing = true;
+    splitState.outputFolder = folder;
+    splitState.lastSavedPath = null;
+    renderSplitParts();
+    document.getElementById('splitActions').style.display = 'none';
+    document.getElementById('splitResults').style.display = 'none';
+    document.getElementById('splitProgress').style.display = 'block';
+    updateSplitProgress(0, 'Preparando...');
+
+    let saved = 0;
+    const failures = [];
+    try {
+        const source = await PDFLib.PDFDocument.load(splitState.bytes, { ignoreEncryption: true });
+
+        for (let i = 0; i < selected.length; i++) {
+            const part = selected[i];
+            const fileName = part.name.trim() || `Parte ${i + 1}`;
+            updateSplitProgress((i / selected.length) * 100, `Salvando: ${fileName}.pdf`);
+            try {
+                const out = await PDFLib.PDFDocument.create();
+                const indices = Array.from({ length: part.count }, (_, k) => part.start + k);
+                const pages = await out.copyPages(source, indices);
+                pages.forEach(page => out.addPage(page));
+                const result = await window.api.savePdfInFolder({
+                    data: bytesToBase64(await out.save()),
+                    folder,
+                    fileName
+                });
+                if (result.success) {
+                    saved++;
+                    splitState.lastSavedPath = splitState.lastSavedPath || result.path;
+                } else {
+                    failures.push(`${fileName}: ${result.error}`);
+                }
+            } catch (e) {
+                failures.push(`${fileName}: ${e.message}`);
+            }
+        }
+        updateSplitProgress(100, 'Concluído!');
+    } catch (e) {
+        failures.push('Não foi possível ler o PDF: ' + e.message);
+    } finally {
+        splitState.isProcessing = false;
+        document.getElementById('splitProgress').style.display = 'none';
+        document.getElementById('splitActions').style.display = 'flex';
+        renderSplitParts();
+    }
+
+    if (saved > 0) {
+        document.getElementById('splitResultsText').textContent = failures.length > 0
+            ? `${saved} arquivo(s) salvos — ${failures.length} com erro`
+            : `${saved} arquivo${saved === 1 ? '' : 's'} salvo${saved === 1 ? '' : 's'} com sucesso!`;
+        document.getElementById('splitResults').style.display = 'block';
+    }
+    if (failures.length > 0) alert('Alguns arquivos não foram salvos:\n\n' + failures.join('\n'));
+}
+
+function openSplitFolder() {
+    if (splitState.lastSavedPath) window.api.openFolder(splitState.lastSavedPath);
+}
+
+function resetSplit() {
+    if (splitState.isProcessing) return;
+    Object.assign(splitState, {
+        path: null, bytes: null, pageCount: 0, detected: [], source: null,
+        parts: [], outputFolder: null, lastSavedPath: null
+    });
+    document.getElementById('splitPanel').style.display = 'none';
+    document.getElementById('splitResults').style.display = 'none';
+    document.getElementById('splitDropZone').style.display = 'block';
 }
 
 // ==================== EDITOR DE PDF ====================
@@ -1377,4 +1765,5 @@ async function saveEditedPdf() {
 
 // Inicialização
 init();
+setupSplit();
 setupEditor();

@@ -57,6 +57,9 @@
             <button class="tab-btn active" data-tab="combine" onclick="switchTab('combine')">
                 <span>📑</span> Combinar
             </button>
+            <button class="tab-btn" data-tab="split" onclick="switchTab('split')">
+                <span>✂️</span> Separar
+            </button>
             <button class="tab-btn" data-tab="edit" onclick="switchTab('edit')">
                 <span>✏️</span> Editar PDF
             </button>
@@ -121,6 +124,70 @@
                             <button class="btn-secondary" onclick="openOutputFile()">📄 Abrir</button>
                             <button class="btn-secondary" onclick="openOutputFolder()">📂 Pasta</button>
                             <button class="btn-primary" onclick="startNew()">➕ Novo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Separar -->
+            <div id="tab-split" class="tab-content">
+                <div class="card">
+                    <div class="drop-zone" id="splitDropZone">
+                        <div class="drop-icon">
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+                                <line x1="20" y1="4" x2="8.12" y2="15.88"/>
+                                <line x1="14.47" y1="14.48" x2="20" y2="20"/>
+                                <line x1="8.12" y1="8.12" x2="12" y2="12"/>
+                            </svg>
+                        </div>
+                        <p class="drop-text">Arraste um PDF para separar</p>
+                        <p class="drop-subtext">Recria os arquivos originais de um PDF combinado — ou separe por páginas</p>
+                    </div>
+
+                    <div id="splitPanel" style="display: none;">
+                        <div class="split-summary">
+                            <div class="file-icon">📕</div>
+                            <div class="file-info">
+                                <div class="file-name" id="splitFileName"></div>
+                                <div class="file-type" id="splitFileInfo"></div>
+                            </div>
+                            <button class="btn-secondary btn-sm" onclick="resetSplit()" title="Escolher outro PDF">↺ Trocar</button>
+                        </div>
+
+                        <div class="sort-bar">
+                            <span class="sort-label">Separar:</span>
+                            <button class="sort-btn mode-btn" data-mode="detected" onclick="setSplitMode('detected')">Arquivos originais</button>
+                            <button class="sort-btn mode-btn" data-mode="ranges" onclick="setSplitMode('ranges')">Por intervalos</button>
+                            <button class="sort-btn mode-btn" data-mode="pages" onclick="setSplitMode('pages')">Página a página</button>
+                            <button class="sort-btn select-all-btn" onclick="toggleAllSplitParts()" title="Marcar / desmarcar todos">☑ Todos</button>
+                        </div>
+
+                        <div class="split-ranges-row" id="splitRangesRow" style="display: none;">
+                            <input type="text" id="splitRanges" class="split-ranges" placeholder="Ex.: 1-3, 4-6, 7" spellcheck="false" autocomplete="off">
+                        </div>
+
+                        <div class="file-list" id="splitPartList"></div>
+
+                        <div class="progress-section" id="splitProgress" style="display: none;">
+                            <div class="progress-info">
+                                <span id="splitProgressText">Processando...</span>
+                                <span id="splitProgressPercent">0%</span>
+                            </div>
+                            <div class="progress-bar"><div class="progress-fill" id="splitProgressFill"></div></div>
+                        </div>
+
+                        <div class="action-bar" id="splitActions">
+                            <button class="btn-primary" id="splitBtn" onclick="splitAndSave()">✂️ Separar</button>
+                        </div>
+
+                        <div class="results-section" id="splitResults" style="display: none;">
+                            <div class="results-icon">✅</div>
+                            <div class="results-text" id="splitResultsText">Arquivos salvos!</div>
+                            <div class="results-actions">
+                                <button class="btn-secondary" onclick="openSplitFolder()">📂 Abrir pasta</button>
+                                <button class="btn-primary" onclick="resetSplit()">➕ Novo</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -224,7 +291,7 @@
                 <span class="footer-sep">·</span>
                 <span>© 2026 — Todos os direitos reservados.</span>
                 <span class="footer-sep">·</span>
-                <span id="appVersion">v1.0.1</span>
+                <span id="appVersion">v1.0.2</span>
             </div>
         </footer>
     </div>

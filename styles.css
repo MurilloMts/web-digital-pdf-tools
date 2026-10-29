@@ -431,6 +431,64 @@ body {
 }
 @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 
+/* Separar PDF */
+.split-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: radial-gradient(400px 120px at 0% 0%, var(--gold-soft), transparent 80%), var(--bg);
+    border: 1px solid var(--gold-line);
+    border-radius: var(--radius-sm);
+}
+.split-summary .btn-sm { font-size: 12.5px !important; padding: 0 12px !important; white-space: nowrap; }
+.sort-btn.active {
+    color: var(--on-gold);
+    background: var(--gold-gradient);
+    border-color: transparent;
+}
+.sort-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.sort-btn:disabled:hover { color: var(--fg-2); background: var(--surface-2); border-color: var(--border); }
+.select-all-btn { margin-left: auto; }
+.split-ranges-row { display: flex; margin-top: 10px; }
+.split-ranges {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+.split-ranges.invalid { border-color: var(--error); box-shadow: 0 0 0 3px var(--error-soft); }
+#splitPartList { max-height: 46vh; overflow-y: auto; padding-right: 2px; }
+.part-item.unselected { opacity: 0.45; }
+.part-check { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; flex-shrink: 0; }
+.part-name {
+    width: 100%;
+    padding: 3px 6px;
+    margin-left: -6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+}
+.part-name:hover:not(:disabled) { border-color: var(--border-strong); }
+.part-name:focus { background: var(--bg); border-color: var(--gold-line); }
+.part-ext { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.split-empty {
+    padding: 22px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+
 /* Action Bar */
 .action-bar {
     display: flex;
